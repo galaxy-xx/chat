@@ -35,11 +35,9 @@ public:
     void sendPrivateMsg(const QString &target, const QString &content);
     void sendPublicMsg(const QString &content);
 
-    // 文件
-    void sendFileMeta(const QString &target, const QString &filename,
-                      qint64 filesize, const QString &fileType);
-    void sendFileData(int fileId, int seq, const QByteArray &chunk);
-    void sendFileEnd(int fileId);
+    // 文件（直接发送到聊天框）
+    void sendFileMsg(const QString &target, const QString &filename,
+                     qint64 filesize, const QString &base64Data);
     void sendHistoryQuery(const QString &type, const QString &target, int limit = 100);
     void sendUserList();
 

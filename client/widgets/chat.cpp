@@ -130,6 +130,57 @@ void ChatWidget::appendImageMessage(const QString &from, const QString &filepath
     });
 }
 
+void ChatWidget::appendFileMessage(const QString &from, const QString &filename,
+                                    qint64 filesize, const QString &time)
+{
+    bool isSelf = (from == QStringLiteral("我"));
+
+    if (!isSelf) {
+        auto *nameLabel = new QLabel(from, m_contentWidget);
+        nameLabel->setStyleSheet(
+            "color: #888888; font-size: 12px; padding: 4px 60px 0 60px; background: transparent;");
+        nameLabel->setAlignment(Qt::AlignLeft);
+        m_contentLayout->insertWidget(m_contentLayout->count() - 1, nameLabel);
+    }
+
+    QString sizeStr;
+    if (filesize < 1024)
+        sizeStr = QStringLiteral("%1 B").arg(filesize);
+    else if (filesize < 1024 * 1024)
+        sizeStr = QStringLiteral("%1 KB").arg(filesize / 1024);
+    else
+        sizeStr = QStringLiteral("%1 MB").arg(filesize / (1024 * 1024));
+
+    auto *container = new QWidget(m_contentWidget);
+    container->setStyleSheet("background: transparent;");
+    auto *clayout = new QVBoxLayout(container);
+    clayout->setContentsMargins(12, 2, 12, 2);
+    clayout->setSpacing(2);
+
+    auto *timeLabel = new QLabel(time, container);
+    timeLabel->setStyleSheet("color: #B0B0B0; font-size: 11px; background: transparent;");
+    timeLabel->setAlignment(isSelf ? Qt::AlignRight : Qt::AlignLeft);
+    clayout->addWidget(timeLabel);
+
+    auto *fileLabel = new QLabel(
+        QStringLiteral("📎 %1\n%2").arg(filename, sizeStr), container);
+    fileLabel->setWordWrap(true);
+    fileLabel->setMaximumWidth(300);
+    fileLabel->setCursor(Qt::PointingHandCursor);
+    fileLabel->setStyleSheet(
+        "background: white; color: #353535; font-size: 13px;"
+        "padding: 10px 14px; border-radius: 6px;");
+    fileLabel->setAlignment(isSelf ? Qt::AlignRight : Qt::AlignLeft);
+    clayout->addWidget(fileLabel, 0, isSelf ? Qt::AlignRight : Qt::AlignLeft);
+
+    m_contentLayout->insertWidget(m_contentLayout->count() - 1, container);
+
+    QTimer::singleShot(50, [this]() {
+        m_scrollArea->verticalScrollBar()->setValue(
+            m_scrollArea->verticalScrollBar()->maximum());
+    });
+}
+
 bool ChatWidget::removeMessage(int msgId)
 {
     if (!m_msgMap.contains(msgId)) return false;

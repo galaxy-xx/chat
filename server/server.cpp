@@ -122,6 +122,7 @@ void ChatServer::processMessage(QTcpSocket *sock, const QByteArray &payload)
     else if (type == MSG_GROUP_LIST)    handleGroupList(sock);
     else if (type == MSG_GROUP_LEAVE)   handleGroupLeave(sock, data);
     else if (type == MSG_GROUP_MEMBERS) handleGroupMembers(sock, data);
+    else if (type == MSG_FILE_MSG)      handleFileMsg(sock, data);
     else sendError(sock, "未知消息类型");
 }
 

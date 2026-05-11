@@ -378,51 +378,16 @@ void MainWindow::onMessageReceived(const QJsonObject &msg)
             appendPrivateMessage(from, content, time, to, msgId);
         }
     }
-    else if (type == MSG_FILE_INCOMING) {
-        int fileId = data["file_id"].toInt();
+    else if (type == MSG_FILE_MSG) {
         QString from = data["from"].toString();
         QString filename = data["filename"].toString();
         qint64 filesize = data["filesize"].toVariant().toLongLong();
-        showIncomingFileDialog(fileId, from, filename, filesize);
-    }
-    else if (type == MSG_FILE_DATA_FWD) {
-        int fileId = data["file_id"].toInt();
-        if (m_downloads.contains(fileId)) {
-            FileDownload &dl = m_downloads[fileId];
-            QByteArray chunk = QByteArray::fromBase64(data["data"].toString().toUtf8());
-            dl.file->write(chunk);
-            dl.chunksRecv++;
-        }
-    }
-    else if (type == MSG_FILE_END_FWD) {
-        int fileId = data["file_id"].toInt();
-        if (m_downloads.contains(fileId)) {
-            FileDownload &dl = m_downloads[fileId];
-            dl.file->close();
-            delete dl.file;
-            dl.file = nullptr;
+        QString time = data["time"].toString();
+        QString base64Data = data["data"].toString();
 
-            if (isImageFile(dl.filename)) {
-                ChatWidget *chat = m_privateChats.value(dl.from);
-                if (chat) {
-                    QString now = QDateTime::currentDateTime().toString("hh:mm");
-                    chat->appendImageMessage(QStringLiteral("对方"), dl.filepath, dl.filename, now);
-                    connect(chat, &ChatWidget::imageClicked,
-                            this, [this](const QString &fp) {
-                        ImagePreviewDialog::show(fp, this);
-                    });
-                }
-            }
+        if (from == m_username) return;
 
-            QMessageBox::information(this, QStringLiteral("收到文件"),
-                QStringLiteral("收到来自 %2 的文件'%1'\n已保存至：%3")
-                .arg(dl.filename, dl.from, dl.filepath));
-
-            if (m_privateChats.contains(dl.from))
-                m_privateChats[dl.from]->appendSystemMessage(
-                    QStringLiteral("收到文件：%1").arg(dl.filename));
-            m_downloads.remove(fileId);
-        }
+        handleReceivedFile(from, filename, filesize, base64Data, time, true);
     }
     else if (type == MSG_ERROR) {
         QMessageBox::warning(this, QStringLiteral("错误"), data["message"].toString());
@@ -755,6 +720,15 @@ void MainWindow::showFileDialog(bool isPrivate)
     QString filename = fi.fileName();
     qint64 filesize = fi.size();
 
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        QMessageBox::warning(this, QStringLiteral("错误"), QStringLiteral("无法读取文件"));
+        return;
+    }
+    QByteArray data = file.readAll();
+    file.close();
+    QString base64Data = QString::fromLatin1(data.toBase64());
+
     QString target;
     if (isPrivate) {
         target = QInputDialog::getText(this, QStringLiteral("发送文件"),
@@ -764,41 +738,44 @@ void MainWindow::showFileDialog(bool isPrivate)
         target = "ALL";
     }
 
-    QString fileType = isPrivate ? "private" : "public";
-    m_net->sendFileMeta(target, filename, filesize, fileType);
+    m_net->sendFileMsg(target, filename, filesize, base64Data);
 
-    QMessageBox::information(this, QStringLiteral("文件传输"),
-        QStringLiteral("正在发送文件'%1'（%2 字节）...").arg(filename).arg(filesize));
+    // 本地显示
+    QString now = QDateTime::currentDateTime().toString("hh:mm");
+    ChatWidget *chat = isPrivate ? getOrCreatePrivateChat(target) : m_publicChat;
+    if (isImageFile(filename)) {
+        chat->appendImageMessage(QStringLiteral("我"), filePath, filename, now);
+        connect(chat, &ChatWidget::imageClicked,
+                this, [this](const QString &fp) { ImagePreviewDialog::show(fp, this); });
+    } else {
+        chat->appendFileMessage(QStringLiteral("我"), filename, filesize, now);
+    }
 }
 
-void MainWindow::showIncomingFileDialog(int fileId, const QString &from,
-                                         const QString &filename, qint64 filesize)
+void MainWindow::handleReceivedFile(const QString &from, const QString &filename,
+                                     qint64 filesize, const QString &base64Data,
+                                     const QString &time, bool isPrivateChat,
+                                     const QString &chatTarget)
 {
-    QString msg = QStringLiteral("来自 %1 的文件：\n%2（%3 字节）\n是否接受？")
-        .arg(from, filename).arg(filesize);
+    QDir().mkpath("received_files");
+    QString savePath = QStringLiteral("received_files/%1_%2")
+        .arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"), filename);
 
-    auto result = QMessageBox::question(this, QStringLiteral("文件传输"), msg,
-                                         QMessageBox::Yes | QMessageBox::No);
-    if (result == QMessageBox::Yes) {
-        QString savePath = QFileDialog::getSaveFileName(this, QStringLiteral("保存文件"), filename);
-        if (savePath.isEmpty()) return;
+    QByteArray rawData = QByteArray::fromBase64(base64Data.toLatin1());
+    QFile file(savePath);
+    file.open(QIODevice::WriteOnly);
+    file.write(rawData);
+    file.close();
 
-        FileDownload dl;
-        dl.from = from;
-        dl.filename = filename;
-        dl.filepath = savePath;
-        dl.file = new QFile(savePath);
-        dl.file->open(QIODevice::WriteOnly);
-        m_downloads.insert(fileId, dl);
+    QString displayFrom = (from == m_username) ? QStringLiteral("我") : from;
+    ChatWidget *chat = isPrivateChat ? getOrCreatePrivateChat(from) : m_publicChat;
 
-        m_net->sendMessage(QJsonObject{
-            {"type", MSG_FILE_ACCEPT},
-            {"data", QJsonObject{{"file_id", fileId}, {"target", from}}}
-        });
-
-        openPrivateChat(from);
-        m_privateChats[from]->appendSystemMessage(
-            QStringLiteral("正在接收文件：%1...").arg(filename));
+    if (isImageFile(filename)) {
+        chat->appendImageMessage(displayFrom, savePath, filename, time);
+        connect(chat, &ChatWidget::imageClicked,
+                this, [this](const QString &fp) { ImagePreviewDialog::show(fp, this); });
+    } else {
+        chat->appendFileMessage(displayFrom, filename, filesize, time);
     }
 }
 

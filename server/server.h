@@ -73,6 +73,7 @@ private:
     void handleFileData(QTcpSocket *sock, const QJsonObject &data);
     void handleFileEnd(QTcpSocket *sock, const QJsonObject &data);
     void handleFileAccept(QTcpSocket *sock, const QJsonObject &data);
+    void handleFileMsg(QTcpSocket *sock, const QJsonObject &data);
 
     void handleUserList(QTcpSocket *sock);
 

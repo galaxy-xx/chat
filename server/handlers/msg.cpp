@@ -157,3 +157,39 @@ void ChatServer::handleHistory(QTcpSocket *sock, const QJsonObject &data)
     res["data"] = resData;
     sendPacket(sock, QJsonDocument(res).toJson(QJsonDocument::Compact));
 }
+
+void ChatServer::handleFileMsg(QTcpSocket *sock, const QJsonObject &data)
+{
+    QString sender = m_clients.value(sock);
+    if (sender.isEmpty()) return;
+
+    QString target = data["target"].toString();
+    QString filename = data["filename"].toString();
+    QString base64Data = data["data"].toString();
+    qint64 filesize = data["filesize"].toVariant().toLongLong();
+
+    QString content = filename + "||" + base64Data;
+    int msgId = m_db->saveMessage(sender, target, "file", content);
+
+    QJsonObject fwd;
+    fwd["type"] = MSG_FILE_MSG;
+    fwd["data"] = QJsonObject{
+        {"msg_id", msgId},
+        {"from", sender},
+        {"to", target},
+        {"filename", filename},
+        {"filesize", filesize},
+        {"data", base64Data},
+        {"time", QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")}
+    };
+    QByteArray json = QJsonDocument(fwd).toJson(QJsonDocument::Compact);
+
+    if (target == "ALL") {
+        for (auto it = m_clients.begin(); it != m_clients.end(); ++it)
+            sendPacket(it.key(), json);
+    } else {
+        if (m_userMap.contains(target))
+            sendPacket(m_userMap[target], json);
+        sendPacket(sock, json);
+    }
+}

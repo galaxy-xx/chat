@@ -21,11 +21,14 @@ public:
     void appendSystemMessage(const QString &msg);
     void appendImageMessage(const QString &from, const QString &filepath,
                             const QString &filename, const QString &time);
+    void appendFileMessage(const QString &from, const QString &filename,
+                           qint64 filesize, const QString &time);
     bool removeMessage(int msgId);
     QString chatWith() const { return m_chatWith; }
 
 signals:
     void imageClicked(const QString &filepath);
+    void fileClicked(const QString &filename, const QString &base64Data);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;

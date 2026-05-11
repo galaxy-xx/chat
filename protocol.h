@@ -55,6 +55,9 @@ constexpr int FILE_CHUNK_SIZE = 8192;
 #define MSG_GROUP_MEMBERS    "group_members"
 #define MSG_GROUP_MEMBERS_RES "group_members_res"
 
+// 文件消息（直接发在聊天框）
+#define MSG_FILE_MSG    "file_msg"
+
 // 消息撤回
 #define MSG_RECALL      "recall"
 #define MSG_RECALL_RES  "recall_res"

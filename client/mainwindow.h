@@ -49,12 +49,14 @@ private:
     void openPrivateChat(const QString &user);
     ChatWidget* getOrCreatePrivateChat(const QString &user);
     void showFileDialog(bool isPrivate);
-    void showIncomingFileDialog(int fileId, const QString &from,
-                                const QString &filename, qint64 filesize);
     void showHistoryDialog();
 
-    // 图片预览
+    // 文件消息处理
     static bool isImageFile(const QString &filename);
+    void handleReceivedFile(const QString &from, const QString &filename,
+                            qint64 filesize, const QString &base64Data,
+                            const QString &time, bool isPrivateChat,
+                            const QString &chatTarget = QString());
 
     // 消息撤回
     void handleRecallNtf(const QJsonObject &data);
@@ -111,15 +113,6 @@ private:
 
     ChatWidget *m_publicChat = nullptr;
     QMap<QString, ChatWidget*> m_privateChats;
-
-    struct FileDownload {
-        QString from;
-        QString filename;
-        QString filepath;
-        QFile  *file = nullptr;
-        int     chunksRecv = 0;
-    };
-    QMap<int, FileDownload> m_downloads;
 };
 
 #endif // MAINWINDOW_H

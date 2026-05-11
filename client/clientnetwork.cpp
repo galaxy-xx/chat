@@ -81,37 +81,17 @@ void ClientNetwork::sendPublicMsg(const QString &content)
     sendMessage(msg);
 }
 
-void ClientNetwork::sendFileMeta(const QString &target, const QString &filename,
-                                  qint64 filesize, const QString &fileType)
+void ClientNetwork::sendFileMsg(const QString &target, const QString &filename,
+                                 qint64 filesize, const QString &base64Data)
 {
     QJsonObject msg;
-    msg["type"] = MSG_FILE_META;
+    msg["type"] = MSG_FILE_MSG;
     msg["data"] = QJsonObject{
         {"target", target},
         {"filename", filename},
         {"filesize", filesize},
-        {"file_type", fileType}
+        {"data", base64Data}
     };
-    sendMessage(msg);
-}
-
-void ClientNetwork::sendFileData(int fileId, int seq, const QByteArray &chunk)
-{
-    QJsonObject msg;
-    msg["type"] = MSG_FILE_DATA;
-    msg["data"] = QJsonObject{
-        {"file_id", fileId},
-        {"seq", seq},
-        {"data", QString(chunk.toBase64())}
-    };
-    sendMessage(msg);
-}
-
-void ClientNetwork::sendFileEnd(int fileId)
-{
-    QJsonObject msg;
-    msg["type"] = MSG_FILE_END;
-    msg["data"] = QJsonObject{{"file_id", fileId}};
     sendMessage(msg);
 }
 

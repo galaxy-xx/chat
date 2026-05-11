@@ -19,53 +19,7 @@
 #include <QStackedWidget>
 
 #include "clientnetwork.h"
-
-// 单个聊天气泡组件
-class BubbleWidget : public QFrame
-{
-    Q_OBJECT
-public:
-    explicit BubbleWidget(const QString &content, const QString &time,
-                          bool isSelf, int msgId = -1,
-                          QWidget *parent = nullptr);
-    int msgId() const { return m_msgId; }
-    bool isSelf() const { return m_isSelf; }
-    void markRecalled();
-
-private:
-    QLabel *m_bubbleLabel = nullptr;
-    int m_msgId;
-    bool m_isSelf;
-};
-
-// 聊天区域组件（滚动区 + 气泡列表）
-class ChatWidget : public QWidget
-{
-    Q_OBJECT
-public:
-    explicit ChatWidget(const QString &chatWith, QWidget *parent = nullptr);
-
-    void appendMessage(const QString &from, const QString &content,
-                       const QString &time, int msgId = -1);
-    void appendSystemMessage(const QString &msg);
-    void appendImageMessage(const QString &from, const QString &filepath,
-                            const QString &filename, const QString &time);
-    bool removeMessage(int msgId);
-    QString chatWith() const { return m_chatWith; }
-
-signals:
-    void imageClicked(const QString &filepath);
-
-protected:
-    bool eventFilter(QObject *obj, QEvent *event) override;
-
-private:
-    QScrollArea *m_scrollArea;
-    QWidget     *m_contentWidget;
-    QVBoxLayout *m_contentLayout;
-    QString m_chatWith;
-    QMap<int, BubbleWidget*> m_msgMap; // msgId -> BubbleWidget
-};
+#include "widgets/chat.h"
 
 class MainWindow : public QMainWindow
 {
@@ -83,8 +37,6 @@ protected:
 private slots:
     void onMessageReceived(const QJsonObject &msg);
     void onSendClicked();
-    void onSendFile();
-    void onShowHistory();
     void onDisconnect();
 
 private:
@@ -97,18 +49,16 @@ private:
     void openPrivateChat(const QString &user);
     ChatWidget* getOrCreatePrivateChat(const QString &user);
     void showFileDialog(bool isPrivate);
-    void showHistoryDialog();
     void showIncomingFileDialog(int fileId, const QString &from,
                                 const QString &filename, qint64 filesize);
-    void showHistoryResults(const QJsonObject &data);
+    void showHistoryDialog();
 
     // 图片预览
-    bool isImageFile(const QString &filename);
-    void showImagePreview(const QString &filepath);
+    static bool isImageFile(const QString &filename);
 
     // 消息撤回
     void handleRecallNtf(const QJsonObject &data);
-    void showRecallMenu(BubbleWidget *bubble);
+    void showRecallMenu(class BubbleWidget *bubble);
 
     // 离线消息
     void requestOfflineMessages();
@@ -131,8 +81,6 @@ private:
     QMap<int, ChatWidget*> m_groupChats;
     QMap<int, QString>     m_groupNames;
     void onCreateGroup();
-    void onGroupMembers(const QJsonObject &data);
-    void onGroupInviteRes(const QJsonObject &data);
     void showGroupMembers(int groupId);
     void inviteToGroup(int groupId);
     void leaveGroup(int groupId);
@@ -154,8 +102,8 @@ private:
     int m_lastMsgId = 0;
 
     QLabel      *m_selfLabel;
-    QListWidget *m_groupList;   // 群组列表
-    QListWidget *m_contactList; // 联系人列表（好友+在线用户+公共聊天）
+    QListWidget *m_groupList;
+    QListWidget *m_contactList;
     QLabel      *m_chatHeader;
     QStackedWidget *m_chatStack;
     QTextEdit   *m_inputEdit;

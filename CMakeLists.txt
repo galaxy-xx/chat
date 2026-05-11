@@ -11,7 +11,16 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 6.2 REQUIRED COMPONENTS Core Network Sql)
 
 qt_add_executable(chat_server
+    server/main.cpp
+    server/database.h
+    server/database.cpp
+    server/server.h
     server/server.cpp
+    server/handlers/auth.cpp
+    server/handlers/msg.cpp
+    server/handlers/friend.cpp
+    server/handlers/group.cpp
+    server/handlers/file.cpp
 )
 
 target_link_libraries(chat_server
@@ -40,6 +49,20 @@ qt_add_executable(chat_client
     client/clientnetwork.cpp
     client/logindialog.h
     client/logindialog.cpp
+    client/widgets/bubble.h
+    client/widgets/bubble.cpp
+    client/widgets/chat.h
+    client/widgets/chat.cpp
+    client/dialogs/frienddlg.h
+    client/dialogs/frienddlg.cpp
+    client/dialogs/groupcreatedlg.h
+    client/dialogs/groupcreatedlg.cpp
+    client/dialogs/memberdlg.h
+    client/dialogs/memberdlg.cpp
+    client/dialogs/historydlg.h
+    client/dialogs/historydlg.cpp
+    client/dialogs/imagedlg.h
+    client/dialogs/imagedlg.cpp
 )
 
 target_link_libraries(chat_client

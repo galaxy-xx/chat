@@ -1,5 +1,19 @@
 # Build
 build/
+
+# Claude
+.claude/
+
+# Qt Creator
+.qtcreator/
+
+# Python
+__pycache__/
+*.pyc
+
+# Docs
+*.docx
+*.pdf
 cmake-build-*/
 *.o
 *.obj

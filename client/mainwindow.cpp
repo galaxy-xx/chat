@@ -441,7 +441,6 @@ void MainWindow::onMessageReceived(const QJsonObject &msg)
     // 离线消息
     else if (type == MSG_OFFLINE_RES) {
         QJsonArray messages = data["messages"].toArray();
-        int seenThreshold = m_lastMsgId;
 
         for (const auto &m : messages) {
             QJsonObject obj = m.toObject();
@@ -455,12 +454,11 @@ void MainWindow::onMessageReceived(const QJsonObject &msg)
             int recalled = obj["recalled"].toInt();
 
             if (recalled) continue;
-            bool isNew = (msgId > seenThreshold);
 
             if (msgType == "public") {
                 QString displayFrom = (from == m_username) ? QStringLiteral("我") : from;
                 m_publicChat->appendMessage(displayFrom, content, time, msgId);
-                if (isNew && m_chatStack->currentWidget() != m_publicChat)
+                if (m_chatStack->currentWidget() != m_publicChat)
                     incUnread("public");
             } else if (msgType == "private") {
                 QString to = obj["to"].toString();
@@ -469,7 +467,7 @@ void MainWindow::onMessageReceived(const QJsonObject &msg)
                 ChatWidget *chat = getOrCreatePrivateChat(partner);
                 QString displayFrom = (from == m_username) ? QStringLiteral("我") : from;
                 chat->appendMessage(displayFrom, content, time, msgId);
-                if (isNew && m_chatStack->currentWidget() != chat)
+                if (m_chatStack->currentWidget() != chat)
                     incUnread(partner);
             } else if (msgType == "file") {
                 int sep = content.indexOf("||");

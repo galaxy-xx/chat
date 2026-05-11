@@ -44,3 +44,6 @@ chat_server.db*
 chat_files/
 *.pid
 *.log
+---
+chat_state_*.json
+received_files/

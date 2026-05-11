@@ -113,15 +113,16 @@ QJsonArray Database::getMessages(const QString &type, const QString &target,
     QSqlQuery q(m_db);
     QString sql;
     if (type == "private") {
-        sql = "SELECT id, sender, target, content, timestamp, recalled FROM messages "
-              "WHERE msg_type='private' AND (sender=? OR target=?) "
+        sql = "SELECT id, sender, target, content, timestamp, recalled, msg_type FROM messages "
+              "WHERE (msg_type='private' OR msg_type='file') AND (sender=? OR target=?) "
               "ORDER BY id DESC LIMIT ?";
         q.prepare(sql);
         q.addBindValue(target);
         q.addBindValue(target);
     } else if (type == "public") {
-        sql = "SELECT id, sender, target, content, timestamp, recalled FROM messages "
-              "WHERE msg_type='public' ORDER BY id DESC LIMIT ?";
+        sql = "SELECT id, sender, target, content, timestamp, recalled, msg_type FROM messages "
+              "WHERE msg_type='public' OR (msg_type='file' AND target='ALL') "
+              "ORDER BY id DESC LIMIT ?";
         q.prepare(sql);
     } else {
         sql = "SELECT id, sender, target, content, timestamp, recalled, msg_type FROM messages "
@@ -136,11 +137,19 @@ QJsonArray Database::getMessages(const QString &type, const QString &target,
         obj["msg_id"] = q.value(0).toInt();
         obj["sender"] = q.value(1).toString();
         obj["target"] = q.value(2).toString();
-        obj["content"] = q.value(3).toString();
+        QString content = q.value(3).toString();
+        QString msgType = q.value(6).toString();
+        if (msgType == "file") {
+            // content 格式为 filename||base64data，只显示文件名
+            int sep = content.indexOf("||");
+            QString fname = sep > 0 ? content.left(sep) : content;
+            obj["content"] = QStringLiteral("[文件] ") + fname;
+        } else {
+            obj["content"] = content;
+        }
         obj["time"] = q.value(4).toString();
         obj["recalled"] = q.value(5).toInt();
-        if (type == "all" && q.value(6).isValid())
-            obj["msg_type"] = q.value(6).toString();
+        obj["msg_type"] = msgType;
         arr.append(obj);
     }
     return arr;
@@ -178,12 +187,15 @@ QJsonArray Database::getMessagesSince(int lastId, const QString &username)
                   "FROM messages WHERE id > ? AND ("
                   "  msg_type='public'"
                   "  OR (msg_type='private' AND (sender=? OR target=?))"
+                  "  OR (msg_type='file' AND ((sender=? OR target=?) OR target='ALL'))"
                   "  OR (msg_type='group' AND target IN ("
                   "    SELECT group_id FROM group_members WHERE username=?"
                   "  ))"
                   ") ORDER BY id ASC LIMIT 200";
     q.prepare(sql);
     q.addBindValue(lastId);
+    q.addBindValue(username);
+    q.addBindValue(username);
     q.addBindValue(username);
     q.addBindValue(username);
     q.addBindValue(username);

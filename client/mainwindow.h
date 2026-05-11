@@ -48,15 +48,14 @@ private:
                               const QString &time, const QString &target, int msgId = -1);
     void openPrivateChat(const QString &user);
     ChatWidget* getOrCreatePrivateChat(const QString &user);
-    void showFileDialog(bool isPrivate);
+    void showFileDialog();
     void showHistoryDialog();
 
     // 文件消息处理
     static bool isImageFile(const QString &filename);
     void handleReceivedFile(const QString &from, const QString &filename,
                             qint64 filesize, const QString &base64Data,
-                            const QString &time, bool isPrivateChat,
-                            const QString &chatTarget = QString());
+                            const QString &time, ChatWidget *chat);
 
     // 消息撤回
     void handleRecallNtf(const QJsonObject &data);

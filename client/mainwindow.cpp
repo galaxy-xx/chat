@@ -45,6 +45,16 @@ MainWindow::MainWindow(ClientNetwork *net, const QString &username,
                        QWidget *parent)
     : QMainWindow(parent), m_net(net), m_username(username)
 {
+    // 读取上次已看过的消息 ID，存在可执行文件同目录
+    QString statePath = QCoreApplication::applicationDirPath()
+                        + QStringLiteral("/chat_state_%1.json").arg(username);
+    QFile f(statePath);
+    if (f.open(QIODevice::ReadOnly)) {
+        QJsonObject state = QJsonDocument::fromJson(f.readAll()).object();
+        m_lastMsgId = state["lastMsgId"].toInt();
+        f.close();
+    }
+
     setupUI();
     setWindowTitle(QStringLiteral("微信"));
     setMinimumSize(800, 560);
@@ -60,7 +70,18 @@ MainWindow::MainWindow(ClientNetwork *net, const QString &username,
     });
 }
 
-MainWindow::~MainWindow() {}
+MainWindow::~MainWindow()
+{
+    QJsonObject state;
+    state["lastMsgId"] = m_lastMsgId;
+    QString statePath = QCoreApplication::applicationDirPath()
+                        + QStringLiteral("/chat_state_%1.json").arg(m_username);
+    QFile f(statePath);
+    if (f.open(QIODevice::WriteOnly)) {
+        f.write(QJsonDocument(state).toJson(QJsonDocument::Compact));
+        f.close();
+    }
+}
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 {
@@ -81,8 +102,7 @@ void MainWindow::setupUI()
     auto *menuBar = new QMenuBar(this);
 
     auto *fileMenu = menuBar->addMenu(QStringLiteral("文件"));
-    fileMenu->addAction(QStringLiteral("发送私有文件..."), this, [this](){ showFileDialog(true); });
-    fileMenu->addAction(QStringLiteral("发送公共文件..."), this, [this](){ showFileDialog(false); });
+    fileMenu->addAction(QStringLiteral("发送文件..."), this, [this](){ showFileDialog(); });
     fileMenu->addSeparator();
     fileMenu->addAction(QStringLiteral("添加好友..."), this, &MainWindow::onAddFriend);
     fileMenu->addAction(QStringLiteral("好友管理..."), this, &MainWindow::onFriendManagement);
@@ -217,13 +237,13 @@ void MainWindow::setupUI()
     toolLayout->setContentsMargins(8, 4, 8, 2);
     toolLayout->setSpacing(4);
 
-    auto *attachBtn = new QPushButton(QStringLiteral("📎"), this);
-    attachBtn->setFixedSize(30, 30);
+    auto *attachBtn = new QPushButton(QStringLiteral("选择文件"), this);
     attachBtn->setCursor(Qt::PointingHandCursor);
     attachBtn->setToolTip(QStringLiteral("发送文件"));
     attachBtn->setStyleSheet(
-        "QPushButton { background: transparent; border: none; font-size: 16px; }"
-        "QPushButton:hover { background: #E8E8E8; border-radius: 4px; }");
+        "QPushButton { background: transparent; color: #07C160; border: 1px solid #07C160;"
+        "  border-radius: 4px; font-size: 12px; padding: 4px 8px; }"
+        "QPushButton:hover { background: #E8F8EE; }");
 
     toolLayout->addWidget(attachBtn);
     toolLayout->addStretch();
@@ -274,7 +294,7 @@ void MainWindow::setupUI()
     setCentralWidget(centralWidget);
 
     connect(m_sendBtn, &QPushButton::clicked, this, &MainWindow::onSendClicked);
-    connect(attachBtn, &QPushButton::clicked, this, [this](){ showFileDialog(true); });
+    connect(attachBtn, &QPushButton::clicked, this, [this](){ showFileDialog(); });
 
     connect(m_groupList, &QListWidget::itemDoubleClicked,
             this, [this](QListWidgetItem *item) {
@@ -380,6 +400,7 @@ void MainWindow::onMessageReceived(const QJsonObject &msg)
     }
     else if (type == MSG_FILE_MSG) {
         QString from = data["from"].toString();
+        QString to = data["to"].toString();
         QString filename = data["filename"].toString();
         qint64 filesize = data["filesize"].toVariant().toLongLong();
         QString time = data["time"].toString();
@@ -387,7 +408,24 @@ void MainWindow::onMessageReceived(const QJsonObject &msg)
 
         if (from == m_username) return;
 
-        handleReceivedFile(from, filename, filesize, base64Data, time, true);
+        ChatWidget *chat = (to == "ALL") ? m_publicChat
+                                         : m_privateChats.value(to.isEmpty() ? from : to);
+        if (!chat) chat = getOrCreatePrivateChat(from);
+        handleReceivedFile(from, filename, filesize, base64Data, time, chat);
+    }
+    else if (type == MSG_GROUP_FILE_MSG) {
+        QString from = data["from"].toString();
+        int groupId = data["group_id"].toInt();
+        QString filename = data["filename"].toString();
+        qint64 filesize = data["filesize"].toVariant().toLongLong();
+        QString time = data["time"].toString();
+        QString base64Data = data["data"].toString();
+
+        if (from == m_username) return;
+
+        ChatWidget *chat = m_groupChats.value(groupId);
+        if (chat)
+            handleReceivedFile(from, filename, filesize, base64Data, time, chat);
     }
     else if (type == MSG_ERROR) {
         QMessageBox::warning(this, QStringLiteral("错误"), data["message"].toString());
@@ -403,6 +441,8 @@ void MainWindow::onMessageReceived(const QJsonObject &msg)
     // 离线消息
     else if (type == MSG_OFFLINE_RES) {
         QJsonArray messages = data["messages"].toArray();
+        int seenThreshold = m_lastMsgId;
+
         for (const auto &m : messages) {
             QJsonObject obj = m.toObject();
             int msgId = obj["msg_id"].toInt();
@@ -415,12 +455,33 @@ void MainWindow::onMessageReceived(const QJsonObject &msg)
             int recalled = obj["recalled"].toInt();
 
             if (recalled) continue;
+            bool isNew = (msgId > seenThreshold);
 
             if (msgType == "public") {
-                appendPublicMessage(from, content, time, msgId);
+                QString displayFrom = (from == m_username) ? QStringLiteral("我") : from;
+                m_publicChat->appendMessage(displayFrom, content, time, msgId);
+                if (isNew && m_chatStack->currentWidget() != m_publicChat)
+                    incUnread("public");
             } else if (msgType == "private") {
                 QString to = obj["to"].toString();
-                appendPrivateMessage(from, content, time, to, msgId);
+                QString partner = (from == m_username) ? to : from;
+                if (partner == "ALL" || partner.isEmpty()) continue;
+                ChatWidget *chat = getOrCreatePrivateChat(partner);
+                QString displayFrom = (from == m_username) ? QStringLiteral("我") : from;
+                chat->appendMessage(displayFrom, content, time, msgId);
+                if (isNew && m_chatStack->currentWidget() != chat)
+                    incUnread(partner);
+            } else if (msgType == "file") {
+                int sep = content.indexOf("||");
+                if (sep > 0) {
+                    QString fname = content.left(sep);
+                    QString b64 = content.mid(sep + 2);
+                    ChatWidget *chat;
+                    QString to = obj["to"].toString();
+                    chat = (to == "ALL") ? m_publicChat
+                                         : getOrCreatePrivateChat(to == m_username ? from : to);
+                    handleReceivedFile(from, fname, 0, b64, time, chat);
+                }
             } else if (msgType == "group") {
                 int groupId = obj["to"].toString().toInt();
                 ChatWidget *chat = m_groupChats.value(groupId);
@@ -430,9 +491,11 @@ void MainWindow::onMessageReceived(const QJsonObject &msg)
                 }
             }
         }
-        if (!messages.isEmpty())
+        if (!messages.isEmpty()) {
             m_publicChat->appendSystemMessage(
                 QStringLiteral("已加载 %1 条离线消息").arg(messages.size()));
+            rebuildContactList();  // 刷新未读数字显示
+        }
     }
     // 好友系统
     else if (type == MSG_FRIEND_REQUEST_RES) {
@@ -621,6 +684,28 @@ void MainWindow::rebuildContactList()
             }
         }
     }
+
+    // 有未读消息但不是好友的用户（离线非好友）
+    QStringList unreadKeys;
+    for (auto it = m_unreadPrivate.begin(); it != m_unreadPrivate.end(); ++it) {
+        if (it.value() > 0 && !m_friends.contains(it.key()) && !m_onlineUsers.contains(it.key()))
+            unreadKeys.append(it.key());
+    }
+    if (!unreadKeys.isEmpty()) {
+        auto *unreadHeader = new QListWidgetItem(QStringLiteral("─ 未读消息 ─"));
+        unreadHeader->setData(Qt::UserRole, "unread_header");
+        unreadHeader->setFlags(unreadHeader->flags() & ~Qt::ItemIsSelectable);
+        unreadHeader->setForeground(QColor("#E67E22"));
+        m_contactList->addItem(unreadHeader);
+
+        for (const auto &name : unreadKeys) {
+            QString display = QStringLiteral("○ %1  [%2]").arg(name).arg(m_unreadPrivate.value(name));
+            auto *item = new QListWidgetItem(display);
+            item->setData(Qt::UserRole, name);
+            item->setForeground(QColor("#E67E22"));
+            m_contactList->addItem(item);
+        }
+    }
 }
 
 void MainWindow::updateUserList(const QJsonArray &users)
@@ -711,7 +796,7 @@ void MainWindow::onSendClicked()
     m_inputEdit->setFocus();
 }
 
-void MainWindow::showFileDialog(bool isPrivate)
+void MainWindow::showFileDialog()
 {
     QString filePath = QFileDialog::getOpenFileName(this, QStringLiteral("选择要发送的文件"));
     if (filePath.isEmpty()) return;
@@ -725,24 +810,51 @@ void MainWindow::showFileDialog(bool isPrivate)
         QMessageBox::warning(this, QStringLiteral("错误"), QStringLiteral("无法读取文件"));
         return;
     }
-    QByteArray data = file.readAll();
+    QByteArray fileData = file.readAll();
     file.close();
-    QString base64Data = QString::fromLatin1(data.toBase64());
+    QString base64Data = QString::fromLatin1(fileData.toBase64());
 
+    // 根据当前聊天确定发送目标
+    QWidget *current = m_chatStack->currentWidget();
     QString target;
-    if (isPrivate) {
-        target = QInputDialog::getText(this, QStringLiteral("发送文件"),
-                                        QStringLiteral("请输入接收者用户名："));
-        if (target.isEmpty()) return;
-    } else {
+    bool isGroup = false;
+    int groupId = 0;
+
+    if (current == m_publicChat) {
         target = "ALL";
+    } else {
+        for (auto it = m_privateChats.begin(); it != m_privateChats.end(); ++it) {
+            if (it.value() == current) {
+                target = it.key();
+                break;
+            }
+        }
+        if (target.isEmpty()) {
+            for (auto it = m_groupChats.begin(); it != m_groupChats.end(); ++it) {
+                if (it.value() == current) {
+                    groupId = it.key();
+                    isGroup = true;
+                    break;
+                }
+            }
+            if (!isGroup) {
+                QMessageBox::warning(this, QStringLiteral("提示"), QStringLiteral("请先选择一个聊天"));
+                return;
+            }
+        }
     }
 
-    m_net->sendFileMsg(target, filename, filesize, base64Data);
+    // 发送
+    if (isGroup) {
+        m_net->sendGroupFileMsg(groupId, filename, filesize, base64Data);
+    } else {
+        m_net->sendFileMsg(target, filename, filesize, base64Data);
+    }
 
     // 本地显示
     QString now = QDateTime::currentDateTime().toString("hh:mm");
-    ChatWidget *chat = isPrivate ? getOrCreatePrivateChat(target) : m_publicChat;
+    ChatWidget *chat = isGroup ? m_groupChats.value(groupId)
+                               : (target == "ALL" ? m_publicChat : getOrCreatePrivateChat(target));
     if (isImageFile(filename)) {
         chat->appendImageMessage(QStringLiteral("我"), filePath, filename, now);
         connect(chat, &ChatWidget::imageClicked,
@@ -754,8 +866,7 @@ void MainWindow::showFileDialog(bool isPrivate)
 
 void MainWindow::handleReceivedFile(const QString &from, const QString &filename,
                                      qint64 filesize, const QString &base64Data,
-                                     const QString &time, bool isPrivateChat,
-                                     const QString &chatTarget)
+                                     const QString &time, ChatWidget *chat)
 {
     QDir().mkpath("received_files");
     QString savePath = QStringLiteral("received_files/%1_%2")
@@ -768,7 +879,6 @@ void MainWindow::handleReceivedFile(const QString &from, const QString &filename
     file.close();
 
     QString displayFrom = (from == m_username) ? QStringLiteral("我") : from;
-    ChatWidget *chat = isPrivateChat ? getOrCreatePrivateChat(from) : m_publicChat;
 
     if (isImageFile(filename)) {
         chat->appendImageMessage(displayFrom, savePath, filename, time);
@@ -824,7 +934,7 @@ void MainWindow::showRecallMenu(BubbleWidget *bubble)
 
 void MainWindow::requestOfflineMessages()
 {
-    m_net->sendOfflineQuery(m_lastMsgId);
+    m_net->sendOfflineQuery(0);  // 加载全部消息用于显示
 }
 
 void MainWindow::onAddFriend()

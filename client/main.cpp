@@ -3,35 +3,9 @@
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QTimer>
-#include <QProcess>
-#include <QDir>
-#include <QFileInfo>
-
 #include "clientnetwork.h"
 #include "logindialog.h"
 #include "mainwindow.h"
-
-// 查找并启动服务器
-static QProcess* startServerProcess()
-{
-    QStringList candidates = {
-        QApplication::applicationDirPath() + "/chat_server",
-        QApplication::applicationDirPath() + "/../chat_server",
-        QApplication::applicationDirPath() + "/../../chat_server",
-        QDir::currentPath() + "/chat_server"
-    };
-
-    for (const auto &p : candidates) {
-        QFileInfo fi(p);
-        if (fi.exists() && fi.isExecutable()) {
-            auto *proc = new QProcess();
-            proc->setWorkingDirectory(fi.absolutePath());
-            proc->start(fi.absoluteFilePath(), {"-f"});
-            return proc;
-        }
-    }
-    return nullptr;
-}
 
 int main(int argc, char *argv[])
 {
@@ -192,7 +166,6 @@ int main(int argc, char *argv[])
 
     ClientNetwork net;
     LoginDialog loginDlg;
-    QProcess *serverProc = nullptr;
     bool authenticated = false;
     QString loggedInUser;
 
@@ -258,40 +231,13 @@ int main(int argc, char *argv[])
                 net.sendRegister(loginDlg.username(), loginDlg.password());
         });
 
-    // ── 连接错误 → 尝试启动服务器 ──
+    // ── 连接错误 → 提示手动启动服务器 ──
     QObject::connect(&net, &ClientNetwork::connectionError,
-        [&](const QString &) {
+        [&](const QString &err) {
             if (!connecting) return;
             connecting = false;
-
-            loginDlg.setStatus(QStringLiteral("正在启动服务器..."));
-            if (!serverProc || serverProc->state() == QProcess::NotRunning) {
-                delete serverProc;
-                serverProc = startServerProcess();
-            }
-
-            if (!serverProc || serverProc->state() == QProcess::NotRunning) {
-                loginDlg.setStatus(QStringLiteral("无法连接服务器，请手动启动 chat_server"));
-                loginDlg.setButtonsEnabled(true);
-                return;
-            }
-
-            loginDlg.setStatus(QStringLiteral("服务器启动中，请稍候..."));
-            QTimer::singleShot(2000, [&]() {
-                if (!net.isConnected()) {
-                    connecting = true;
-                    loginDlg.setStatus(QStringLiteral("正在重试连接..."));
-                    net.connectToServer(serverHost, serverPort);
-
-                    QTimer::singleShot(3000, [&]() {
-                        if (!net.isConnected()) {
-                            connecting = false;
-                            loginDlg.setStatus(QStringLiteral("连接服务器失败，请检查 chat_server"));
-                            loginDlg.setButtonsEnabled(true);
-                        }
-                    });
-                }
-            });
+            loginDlg.setStatus(QStringLiteral("连接失败：%1\n请确保 chat_server 已在运行").arg(err));
+            loginDlg.setButtonsEnabled(true);
         });
 
     // ── 运行登录对话框 ──
@@ -307,11 +253,5 @@ int main(int argc, char *argv[])
 
     int ret = app.exec();
     delete mainWin;
-    if (serverProc) {
-        serverProc->terminate();
-        if (!serverProc->waitForFinished(3000))
-            serverProc->kill();
-        delete serverProc;
-    }
     return ret;
 }

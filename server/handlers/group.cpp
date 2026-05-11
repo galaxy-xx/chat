@@ -165,3 +165,41 @@ void ChatServer::handleGroupMembers(QTcpSocket *sock, const QJsonObject &data)
     res["data"] = QJsonObject{{"group_id", groupId}, {"members", arr}};
     sendPacket(sock, QJsonDocument(res).toJson(QJsonDocument::Compact));
 }
+
+void ChatServer::handleGroupFileMsg(QTcpSocket *sock, const QJsonObject &data)
+{
+    QString sender = m_clients.value(sock);
+    if (sender.isEmpty()) return;
+
+    int groupId = data["group_id"].toInt();
+    QString filename = data["filename"].toString();
+    QString base64Data = data["data"].toString();
+    qint64 filesize = data["filesize"].toVariant().toLongLong();
+
+    if (!m_db->isGroupMember(groupId, sender)) {
+        sendError(sock, "你不是群成员");
+        return;
+    }
+
+    QString content = filename + "||" + base64Data;
+    int msgId = m_db->saveMessage(sender, QString::number(groupId), "file", content);
+
+    QJsonObject fwd;
+    fwd["type"] = MSG_GROUP_FILE_MSG;
+    fwd["data"] = QJsonObject{
+        {"msg_id", msgId},
+        {"group_id", groupId},
+        {"from", sender},
+        {"filename", filename},
+        {"filesize", filesize},
+        {"data", base64Data},
+        {"time", QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")}
+    };
+
+    QStringList members = m_db->getGroupMembers(groupId);
+    QByteArray json = QJsonDocument(fwd).toJson(QJsonDocument::Compact);
+    for (const auto &m : members) {
+        if (m_userMap.contains(m))
+            sendPacket(m_userMap[m], json);
+    }
+}

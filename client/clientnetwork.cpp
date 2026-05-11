@@ -95,6 +95,20 @@ void ClientNetwork::sendFileMsg(const QString &target, const QString &filename,
     sendMessage(msg);
 }
 
+void ClientNetwork::sendGroupFileMsg(int groupId, const QString &filename,
+                                      qint64 filesize, const QString &base64Data)
+{
+    QJsonObject msg;
+    msg["type"] = MSG_GROUP_FILE_MSG;
+    msg["data"] = QJsonObject{
+        {"group_id", groupId},
+        {"filename", filename},
+        {"filesize", filesize},
+        {"data", base64Data}
+    };
+    sendMessage(msg);
+}
+
 void ClientNetwork::sendHistoryQuery(const QString &type, const QString &target, int limit)
 {
     QJsonObject msg;

@@ -38,6 +38,8 @@ public:
     // 文件（直接发送到聊天框）
     void sendFileMsg(const QString &target, const QString &filename,
                      qint64 filesize, const QString &base64Data);
+    void sendGroupFileMsg(int groupId, const QString &filename,
+                          qint64 filesize, const QString &base64Data);
     void sendHistoryQuery(const QString &type, const QString &target, int limit = 100);
     void sendUserList();
 

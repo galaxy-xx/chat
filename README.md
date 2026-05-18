@@ -82,6 +82,11 @@
 ```bash
 sudo apt install cmake qt6-base-dev libqt6sql6-sqlite
 ```
+### QT Creator启动：（推荐）
+
+用qt打开CMakeLists.txt，编译运行，多客户端可在build文件夹中手动启动多个
+
+使用qt启动 一些图标 ui 显示正常
 
 ### 一键编译运行（推荐）
 

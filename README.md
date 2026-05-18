@@ -15,182 +15,6 @@
 - **历史查询**：按消息类型（私聊/公聊/全部）和时间范围查询历史记录
 - **未读提醒**：联系人列表显示未读消息数字徽标
 
-## 系统架构图
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         客户端 (Client)                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │  LoginDialog  │  │  MainWindow  │  │  ChatWidget  │          │
-│  │  登录/注册    │→ │  主聊天界面  │→ │  聊天窗口    │          │
-│  └──────────────┘  └──────┬───────┘  └──────────────┘          │
-│                           │                                      │
-│                    ┌──────┴───────┐                              │
-│                    │ ClientNetwork │                              │
-│                    │  TCP 客户端   │                              │
-│                    └──────┬───────┘                              │
-└───────────────────────────┼─────────────────────────────────────┘
-                            │ TCP (端口 8888)
-                            │ 长度前缀 + JSON
-┌───────────────────────────┼─────────────────────────────────────┐
-│                    服务器 (Server)                                │
-│                    ┌──────┴───────┐                              │
-│                    │  ChatServer   │                              │
-│                    │  消息分发     │                              │
-│                    └──┬───┬───┬──┘                               │
-│              ┌────────┤   │   ├────────┐                        │
-│         ┌────┴───┐ ┌──┴──┐│┌──┴───┐ ┌──┴───┐                   │
-│         │  auth  │ │ msg │││friend│ │group │                    │
-│         │认证处理│ │消息 │││好友  │ │群聊  │                    │
-│         └────────┘ └─────┘│└──────┘ └──────┘                   │
-│                           │                                      │
-│                    ┌──────┴───────┐                              │
-│                    │   Database    │                              │
-│                    │   SQLite      │                              │
-│                    └──────────────┘                              │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## 服务器端模块
-
-```
-ChatServer
-├── 认证处理 (auth.cpp)
-│   ├── handleRegister()      用户注册
-│   ├── handleLogin()         用户登录
-│   ├── handleLogout()        用户登出
-│   └── handleDeleteAccount() 用户注销
-├── 聊天消息 (msg.cpp)
-│   ├── handlePrivateMsg()    私聊消息
-│   ├── handlePublicMsg()     公聊消息
-│   ├── handleFileMsg()       文件消息
-│   ├── handleRecall()        消息撤回
-│   ├── handleOfflineQuery()  离线消息查询
-│   └── handleHistory()       历史记录查询
-├── 好友关系 (friend.cpp)
-│   ├── handleFriendRequest() 发送好友请求
-│   ├── handleFriendAccept()  接受好友请求
-│   ├── handleFriendReject()  拒绝好友请求
-│   ├── handleFriendList()    好友列表
-│   └── handleFriendRemove()  删除好友
-├── 群聊管理 (group.cpp)
-│   ├── handleGroupCreate()   创建群聊
-│   ├── handleGroupInvite()   邀请成员
-│   ├── handleGroupMsg()      群消息
-│   ├── handleGroupList()     群列表
-│   ├── handleGroupLeave()    退出群聊
-│   └── handleGroupMembers()  群成员列表
-└── 数据库 (database.cpp)
-    ├── 用户管理    registerUser / loginUser / deleteUser
-    ├── 消息管理    saveMessage / getMessages / getMessagesSince
-    ├── 文件管理    saveFileRecord / getFiles
-    ├── 好友管理    sendFriendRequest / acceptFriendRequest / ...
-    └── 群组管理    createGroup / addGroupMember / ...
-```
-
-## 客户端模块
-
-```
-Client
-├── main.cpp (程序入口)
-│   ├── LoginDialog  → 登录/注册界面
-│   └── MainWindow   → 主聊天界面（登录成功后循环）
-├── ClientNetwork (网络通信)
-│   ├── connectToServer()     连接服务器
-│   ├── sendLogin/Register()  认证请求
-│   ├── sendPrivateMsg()      私聊消息
-│   ├── sendPublicMsg()       公聊消息
-│   ├── sendFileMsg()         文件消息
-│   ├── sendRecall()          撤回请求
-│   ├── sendFriendRequest()   好友请求
-│   ├── sendGroupCreate()     创建群聊
-│   └── sendHistoryQuery()    历史查询
-├── MainWindow (主界面)
-│   ├── 左侧栏
-│   │   ├── 群组列表 (QListWidget)
-│   │   └── 联系人列表 (QListWidget)
-│   ├── 右侧区
-│   │   ├── 聊天标题 (QLabel)
-│   │   ├── 聊天窗口 (QStackedWidget)
-│   │   │   ├── 公聊 ChatWidget
-│   │   │   ├── 私聊 ChatWidget (每个用户一个)
-│   │   │   └── 群聊 ChatWidget (每个群一个)
-│   │   └── 输入区域 (QTextEdit + 发送按钮)
-│   └── 菜单栏
-│       ├── 文件 → 发送文件 / 添加好友 / 好友管理 / 创建群聊 / 注销账号 / 退出登录
-│       └── 查看 → 聊天历史
-└── Dialogs (对话框)
-    ├── HistoryDialog      历史查询（支持时间范围）
-    ├── FriendManagement   好友管理
-    ├── CreateGroupDialog  创建群聊
-    ├── GroupMembersDialog 群成员列表
-    └── ImagePreviewDialog 图片预览
-```
-
-## 消息流程图
-
-```
-用户A                    服务器                    用户B
-  │                        │                        │
-  │──── private_msg ──────→│                        │
-  │     {target:B,         │                        │
-  │      content:"你好"}    │                        │
-  │                        │── 保存到 messages 表 ──│
-  │                        │                        │
-  │←─── message (回显) ────│                        │
-  │     {msg_id:42,        │                        │
-  │      from:A, to:B}     │──── message (转发) ───→│
-  │                        │     {msg_id:42,        │
-  │                        │      from:A, to:B}     │
-  │                        │                        │
-  │                        │                        │
-  │──── recall ────────────→│                        │
-  │     {msg_id:42}         │                        │
-  │                        │── 验证: 发送者+2分钟 ──│
-  │                        │── markRecalled() ──────│
-  │←─── recall_res ────────│                        │
-  │     {ok:true}          │──── recall_ntf ───────→│
-  │                        │     {msg_id:42}        │
-```
-
-## 数据库 ER 图
-
-```
-┌──────────────┐       ┌──────────────────────┐       ┌──────────────┐
-│    users     │       │      messages        │       │    files     │
-├──────────────┤       ├──────────────────────┤       ├──────────────┤
-│ id (PK)      │       │ id (PK)              │       │ id (PK)      │
-│ username (UQ)│──┐    │ sender (FK→users)    │       │ sender       │
-│ password     │  │    │ target               │       │ target       │
-│ created_at   │  │    │ msg_type             │       │ file_type    │
-└──────────────┘  │    │ content              │       │ filename     │
-                  │    │ recalled             │       │ filepath     │
-                  │    │ timestamp            │       │ filesize     │
-                  │    └──────────────────────┘       │ status       │
-                  │                                    │ timestamp    │
-                  │    ┌──────────────────────┐       └──────────────┘
-                  │    │    friendships        │
-                  │    ├──────────────────────┤       ┌──────────────┐
-                  ├───→│ requester (FK→users) │       │  groups_tbl  │
-                  ├───→│ responder (FK→users) │       ├──────────────┤
-                  │    │ status               │       │ id (PK)      │
-                  │    │ created_at           │       │ name         │
-                  │    └──────────────────────┘       │ creator (FK) │
-                  │                                    │ created_at   │
-                  │    ┌──────────────────────┐       └──────┬───────┘
-                  │    │   group_members       │              │
-                  │    ├──────────────────────┤       ┌──────┴───────┐
-                  │    │ id (PK)              │       │ group_members│
-                  ├───→│ group_id (FK→groups) │       ├──────────────┤
-                  │    │ username (FK→users)  │       │ group_id (FK)│
-                  │    │ role                 │       │ username (FK)│
-                  │    │ joined_at            │       │ role         │
-                  │    └──────────────────────┘       │ joined_at    │
-                  │                                    └──────────────┘
-                  │
-            (用户是所有表的核心实体)
-```
-
 ## 技术架构
 
 | 层面 | 技术选型 |
@@ -253,11 +77,26 @@ Client
 - CMake 3.16+
 - GCC 11+
 
-### 编译
+### 安装依赖
+
+```bash
+sudo apt install cmake qt6-base-dev libqt6sql6-sqlite
+```
+
+### 一键编译运行（推荐）
+
+```bash
+chmod +x build.sh
+./build.sh run
+```
+
+脚本会自动检查依赖、编译、启动服务器和客户端。
+
+### 手动编译
 
 ```bash
 mkdir build && cd build
-/home/aloha/Qt/6.11.0/gcc_64/bin/qt-cmake ..
+cmake ..
 make -j$(nproc)
 ```
 
@@ -265,28 +104,27 @@ make -j$(nproc)
 
 ```bash
 # 启动服务器（前台模式，可查看日志）
-./chat_server -f
+./build/chat_server -f
 
 # 启动服务器（守护进程模式，后台运行）
-./chat_server
+./build/chat_server
 
 # 启动客户端（默认连接 127.0.0.1:8888）
-./chat_client
+./build/chat_client
 
 # 指定服务器地址
-./chat_client 192.168.1.100 8888
+./build/chat_client 192.168.1.100 8888
 ```
 
-打开多个客户端窗口即可模拟多用户聊天。
-
-### 运行测试
+### build.sh 命令
 
 ```bash
-# 先启动服务器
-./chat_server -f &
-
-# 运行协议层测试
-python3 test_features.py
+./build.sh run      # 一键编译并运行
+./build.sh build    # 只编译
+./build.sh start    # 启动服务器
+./build.sh stop     # 停止服务器
+./build.sh restart  # 重启服务器
+./build.sh client   # 启动客户端
 ```
 
 ## 通信协议

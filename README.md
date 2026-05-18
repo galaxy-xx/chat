@@ -141,3 +141,8 @@ JSON 消息体结构：
 ## 界面风格
 
 参考微信设计，采用绿色主题（#07C160），聊天气泡使用绿色（自己）和白色（对方）配色，支持左右分栏布局。
+<img width="473" height="546" alt="image" src="https://github.com/user-attachments/assets/2e130b94-9537-4332-9680-26bab14730a9" />
+
+<img width="765" height="543" alt="image" src="https://github.com/user-attachments/assets/5a3a4e0b-dd96-4bd8-abef-339a4bb4fd7e" />
+
+

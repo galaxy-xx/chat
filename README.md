@@ -88,7 +88,7 @@ sudo apt install cmake qt6-base-dev libqt6sql6-sqlite
 
 使用qt启动 一些图标 ui 显示正常
 
-### 一键编译运行（推荐）
+### 一键编译运行
 
 ```bash
 chmod +x build.sh

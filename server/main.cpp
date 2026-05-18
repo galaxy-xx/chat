@@ -44,12 +44,13 @@ int main(int argc, char *argv[])
     if (!foreground) daemonize();
 
     Database db;
-    if (!db.open("chat_server.db")) {
+    QString dbPath = QDir::homePath() + "/.chat_server.db";
+    if (!db.open(dbPath)) {
         qCritical("无法打开数据库");
         return 1;
     }
 
-    QString storageDir = "chat_files";
+    QString storageDir = QDir::homePath() + "/.chat_files";
     QDir().mkpath(storageDir);
 
     ChatServer server(&db, storageDir);

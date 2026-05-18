@@ -14,6 +14,7 @@ public:
                           QWidget *parent = nullptr);
     int msgId() const { return m_msgId; }
     bool isSelf() const { return m_isSelf; }
+    void setMsgId(int id) { m_msgId = id; }
     void markRecalled();
 
 private:

@@ -20,12 +20,14 @@ BubbleWidget::BubbleWidget(const QString &content, const QString &time,
 
     m_bubbleLabel = new QLabel(content, this);
     m_bubbleLabel->setWordWrap(true);
-    m_bubbleLabel->setMaximumWidth(420);
     m_bubbleLabel->setStyleSheet(QString(
         "background: %1; color: #353535; font-size: 14px;"
         "padding: 10px 14px; border-radius: 6px;"
     ).arg(bgColor));
     m_bubbleLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
+
+    // 限制气泡最大宽度，强制长文本换行，气泡高度自适应
+    setMaximumWidth(460);
 
     auto *shadow = new QGraphicsDropShadowEffect(m_bubbleLabel);
     shadow->setBlurRadius(8);

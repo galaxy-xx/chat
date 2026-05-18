@@ -65,7 +65,8 @@ void ChatWidget::appendMessage(const QString &from, const QString &content,
 
     auto *bubble = new BubbleWidget(content, time, isSelf, msgId, m_contentWidget);
     bubble->installEventFilter(this);
-    m_contentLayout->insertWidget(m_contentLayout->count() - 1, bubble);
+    Qt::Alignment align = isSelf ? Qt::AlignRight : Qt::AlignLeft;
+    m_contentLayout->insertWidget(m_contentLayout->count() - 1, bubble, 0, align);
 
     if (msgId > 0)
         m_msgMap.insert(msgId, bubble);
@@ -196,4 +197,18 @@ bool ChatWidget::removeMessage(int msgId)
     BubbleWidget *bubble = m_msgMap.take(msgId);
     bubble->markRecalled();
     return true;
+}
+
+void ChatWidget::updateLastMsgId(int msgId)
+{
+    for (int i = m_contentLayout->count() - 1; i >= 0; --i) {
+        QWidget *w = m_contentLayout->itemAt(i)->widget();
+        if (auto *bubble = qobject_cast<BubbleWidget*>(w)) {
+            if (bubble->msgId() == -1) {
+                bubble->setMsgId(msgId);
+                m_msgMap.insert(msgId, bubble);
+                break;
+            }
+        }
+    }
 }

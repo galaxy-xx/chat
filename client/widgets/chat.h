@@ -24,6 +24,7 @@ public:
     void appendFileMessage(const QString &from, const QString &filename,
                            qint64 filesize, const QString &time);
     bool removeMessage(int msgId);
+    void updateLastMsgId(int msgId);
     QString chatWith() const { return m_chatWith; }
 
 signals:

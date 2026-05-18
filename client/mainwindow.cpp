@@ -224,6 +224,8 @@ void MainWindow::setupUI()
     m_chatStack->addWidget(m_publicChat);
     connect(m_publicChat, &ChatWidget::bubbleRightClicked,
             this, &MainWindow::showRecallMenu);
+    connect(m_publicChat, &ChatWidget::imageClicked,
+            this, [this](const QString &fp) { ImagePreviewDialog::show(fp, this); });
 
     rightLayout->addWidget(m_chatStack, 1);
 
@@ -390,8 +392,17 @@ void MainWindow::onMessageReceived(const QJsonObject &msg)
         if (msgId > 0 && msgId > m_lastMsgId)
             m_lastMsgId = msgId;
 
-        if (from == m_username)
+        if (from == m_username) {
+            // 收到自己消息的回显，更新最后一条消息的 msgId
+            if (msgType == "public")
+                m_publicChat->updateLastMsgId(msgId);
+            else {
+                QString partner = to;
+                if (m_privateChats.contains(partner))
+                    m_privateChats[partner]->updateLastMsgId(msgId);
+            }
             return;
+        }
 
         if (msgType == "public") {
             appendPublicMessage(from, content, time, msgId);
@@ -560,8 +571,11 @@ void MainWindow::onMessageReceived(const QJsonObject &msg)
         if (msgId > 0 && msgId > m_lastMsgId)
             m_lastMsgId = msgId;
 
-        if (from == m_username)
+        if (from == m_username) {
+            ChatWidget *chat = m_groupChats.value(groupId);
+            if (chat) chat->updateLastMsgId(msgId);
             return;
+        }
 
         ChatWidget *chat = m_groupChats.value(groupId);
         if (!chat) {
@@ -763,6 +777,8 @@ ChatWidget* MainWindow::getOrCreatePrivateChat(const QString &user)
     m_privateChats[user] = chat;
     connect(chat, &ChatWidget::bubbleRightClicked,
             this, &MainWindow::showRecallMenu);
+    connect(chat, &ChatWidget::imageClicked,
+            this, [this](const QString &fp) { ImagePreviewDialog::show(fp, this); });
     return chat;
 }
 
@@ -872,8 +888,6 @@ void MainWindow::showFileDialog()
                                : (target == "ALL" ? m_publicChat : getOrCreatePrivateChat(target));
     if (isImageFile(filename)) {
         chat->appendImageMessage(QStringLiteral("我"), filePath, filename, now);
-        connect(chat, &ChatWidget::imageClicked,
-                this, [this](const QString &fp) { ImagePreviewDialog::show(fp, this); });
     } else {
         chat->appendFileMessage(QStringLiteral("我"), filename, filesize, now);
     }
@@ -897,8 +911,6 @@ void MainWindow::handleReceivedFile(const QString &from, const QString &filename
 
     if (isImageFile(filename)) {
         chat->appendImageMessage(displayFrom, savePath, filename, time);
-        connect(chat, &ChatWidget::imageClicked,
-                this, [this](const QString &fp) { ImagePreviewDialog::show(fp, this); });
     } else {
         chat->appendFileMessage(displayFrom, filename, filesize, time);
     }
@@ -1048,6 +1060,8 @@ ChatWidget* MainWindow::getOrCreateGroupChat(int groupId, const QString &groupNa
     chat->appendSystemMessage(QStringLiteral("欢迎加入群聊 %1").arg(groupName));
     connect(chat, &ChatWidget::bubbleRightClicked,
             this, &MainWindow::showRecallMenu);
+    connect(chat, &ChatWidget::imageClicked,
+            this, [this](const QString &fp) { ImagePreviewDialog::show(fp, this); });
     return chat;
 }
 

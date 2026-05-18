@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-综合测试脚本：测试聊天系统全部 6 个进阶功能
+综合测试脚本：测试聊天系统全部功能
 
 用法:
   # 先启动服务端 (前台模式)
@@ -17,6 +17,8 @@
   5. 公共消息 + 撤回: alice 发公共消息 → 撤回
   6. 群消息: alice 发群消息
   7. 离线消息: bob 登出 → alice 发消息 → bob 重新登录 → bob 收到离线消息
+  8. 历史查询按时间范围过滤
+  9. 客户注销
 """
 
 import socket
@@ -508,6 +510,75 @@ def test_pending_friend_request(charlie, alice):
     return alice2
 
 
+def test_history_time_range(alice):
+    """测试历史查询按时间范围过滤"""
+    print("\n=== 测试: 历史查询时间范围过滤 ===")
+
+    # 先查全部历史
+    alice.send("history_query", {"type": "public", "target": "alice", "limit": 100})
+    resp = alice.recv("history_res")
+    all_msgs = resp.get("data", {}).get("messages", [])
+    print(f"  全部公共消息: {len(all_msgs)} 条")
+
+    # 用一个很早的时间范围查询（应该能查到）
+    alice.send("history_query", {
+        "type": "public", "target": "alice", "limit": 100,
+        "start_time": "2020-01-01 00:00:00",
+        "end_time": "2030-12-31 23:59:59"
+    })
+    resp = alice.recv("history_res")
+    range_msgs = resp.get("data", {}).get("messages", [])
+    print(f"  大范围时间查询: {len(range_msgs)} 条")
+    if len(range_msgs) >= len(all_msgs):
+        print(f"  ✓ 时间范围查询结果正确")
+    else:
+        print(f"  ✗ 时间范围查询结果不一致")
+
+    # 用一个很窄的时间范围（应该查不到）
+    alice.send("history_query", {
+        "type": "public", "target": "alice", "limit": 100,
+        "start_time": "2020-01-01 00:00:00",
+        "end_time": "2020-01-02 00:00:00"
+    })
+    resp = alice.recv("history_res")
+    narrow_msgs = resp.get("data", {}).get("messages", [])
+    print(f"  窄范围时间查询: {len(narrow_msgs)} 条")
+    if len(narrow_msgs) == 0:
+        print(f"  ✓ 窄范围时间过滤正确")
+    else:
+        print(f"  ✗ 窄范围应返回 0 条")
+
+    return True
+
+
+def test_delete_account(user_client, username, password):
+    """测试注销账号"""
+    print(f"\n=== 测试: 注销账号 ({username}) ===")
+    user_client.send("delete_account")
+    resp = user_client.recv("delete_account_res")
+    ok = resp.get("data", {}).get("ok", False)
+    if ok:
+        print(f"  ✓ 账号 {username} 注销成功")
+    else:
+        print(f"  ✗ 注销失败")
+        return False
+
+    user_client.close()
+    time.sleep(0.3)
+
+    # 验证无法再登录
+    test_client = ChatClient(f"{username}(验证)")
+    test_client.send("login", {"username": username, "password": password})
+    resp = test_client.recv("login_res")
+    login_ok = resp.get("data", {}).get("ok", False)
+    if not login_ok:
+        print(f"  ✓ 注销后无法登录，验证通过")
+    else:
+        print(f"  ✗ 注销后仍能登录")
+    test_client.close()
+    return True
+
+
 def main():
     print("=" * 60)
     print("聊天系统功能测试")
@@ -550,9 +621,14 @@ def main():
     # 5. 离线好友请求持久化
     alice = test_pending_friend_request(charlie, alice)
 
+    # 6. 历史查询时间范围过滤
+    test_history_time_range(alice)
+
+    # 7. 客户注销（用 charlie 测试）
+    test_delete_account(charlie, "charlie", "charlie123")
+
     # 清理
     alice.close()
-    charlie.close()
 
     print("\n" + "=" * 60)
     print("测试完成!")
@@ -561,6 +637,8 @@ def main():
     print("  - 图片预览 (文件传输后自动检测图片显示)")
     print("  - 未读徽标 (左侧列表显示 [N] 计数)")
     print("  - 右击撤回菜单 (自己气泡2分钟内可右击撤回)")
+    print("  - 注销账号菜单项 (文件→注销账号)")
+    print("  - 历史查询时间范围选择器 (查看→聊天历史)")
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@ public:
     void sendRegister(const QString &user, const QString &pass);
     void sendLogin(const QString &user, const QString &pass);
     void sendLogout();
+    void sendDeleteAccount();
 
     // 聊天
     void sendPrivateMsg(const QString &target, const QString &content);
@@ -40,7 +41,9 @@ public:
                      qint64 filesize, const QString &base64Data);
     void sendGroupFileMsg(int groupId, const QString &filename,
                           qint64 filesize, const QString &base64Data);
-    void sendHistoryQuery(const QString &type, const QString &target, int limit = 100);
+    void sendHistoryQuery(const QString &type, const QString &target, int limit = 100,
+                          const QString &startTime = QString(),
+                          const QString &endTime = QString());
     void sendUserList();
 
     // 消息撤回

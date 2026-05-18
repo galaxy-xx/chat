@@ -164,94 +164,106 @@ int main(int argc, char *argv[])
     if (argc > 1) serverHost = argv[1];
     if (argc > 2) serverPort = atoi(argv[2]);
 
-    ClientNetwork net;
-    LoginDialog loginDlg;
-    bool authenticated = false;
-    QString loggedInUser;
+    // ── 登录→主界面 循环 ──
+    while (true) {
+        ClientNetwork net;
+        LoginDialog loginDlg;
+        bool authenticated = false;
+        QString loggedInUser;
 
-    // ── 处理服务器返回的登录/注册结果 ──
-    QObject::connect(&net, &ClientNetwork::messageReceived,
-        [&](const QJsonObject &msg) {
-            QString type = msg["type"].toString();
-            QJsonObject data = msg["data"].toObject();
+        // ── 处理服务器返回的登录/注册结果 ──
+        QObject::connect(&net, &ClientNetwork::messageReceived,
+            [&](const QJsonObject &msg) {
+                QString type = msg["type"].toString();
+                QJsonObject data = msg["data"].toObject();
 
-            if (type == MSG_LOGIN_RES || type == MSG_REGISTER_RES) {
-                bool ok = data["ok"].toBool();
-                QString message = data["message"].toString();
+                if (type == MSG_LOGIN_RES || type == MSG_REGISTER_RES) {
+                    bool ok = data["ok"].toBool();
+                    QString message = data["message"].toString();
 
-                if (ok && type == MSG_LOGIN_RES) {
-                    authenticated = true;
-                    loggedInUser = loginDlg.username();
-                    loginDlg.accept();
-                } else if (ok && type == MSG_REGISTER_RES) {
-                    QMessageBox::information(&loginDlg, QStringLiteral("成功"),
-                        QStringLiteral("注册成功，请登录！"));
-                    loginDlg.setStatus(QStringLiteral("注册成功，请登录"));
-                    loginDlg.setButtonsEnabled(true);
-                } else {
-                    loginDlg.setStatus(message);
-                    loginDlg.setButtonsEnabled(true);
+                    if (ok && type == MSG_LOGIN_RES) {
+                        authenticated = true;
+                        loggedInUser = loginDlg.username();
+                        loginDlg.accept();
+                    } else if (ok && type == MSG_REGISTER_RES) {
+                        QMessageBox::information(&loginDlg, QStringLiteral("成功"),
+                            QStringLiteral("注册成功，请登录！"));
+                        loginDlg.setStatus(QStringLiteral("注册成功，请登录"));
+                        loginDlg.setButtonsEnabled(true);
+                    } else {
+                        loginDlg.setStatus(message);
+                        loginDlg.setButtonsEnabled(true);
+                    }
                 }
-            }
-        });
+            });
 
-    // ── 连接后的自动发送 ──
-    bool pendingRegister = false;
-    QObject::connect(&net, &ClientNetwork::connected, [&]() {
-        loginDlg.setStatus(QStringLiteral("已连接，正在验证..."));
-        if (pendingRegister)
-            net.sendRegister(loginDlg.username(), loginDlg.password());
-        else
-            net.sendLogin(loginDlg.username(), loginDlg.password());
-    });
-
-    // ── 发起连接（点击登录/注册时调用） ──
-    bool connecting = false;
-    auto doConnect = [&](bool isRegister) {
-        connecting = true;
-        pendingRegister = isRegister;
-        loginDlg.setStatus(QStringLiteral("正在连接服务器..."));
-        net.connectToServer(serverHost, serverPort);
-    };
-
-    // ── 按钮事件 ──
-    QObject::connect(&loginDlg, &LoginDialog::loginRequested,
-        [&](const QString &, const QString &) {
-            if (!net.isConnected() && !connecting)
-                doConnect(false);
-            else if (net.isConnected())
+        // ── 连接后的自动发送 ──
+        bool pendingRegister = false;
+        QObject::connect(&net, &ClientNetwork::connected, [&]() {
+            loginDlg.setStatus(QStringLiteral("已连接，正在验证..."));
+            if (pendingRegister)
+                net.sendRegister(loginDlg.username(), loginDlg.password());
+            else
                 net.sendLogin(loginDlg.username(), loginDlg.password());
         });
 
-    QObject::connect(&loginDlg, &LoginDialog::registerRequested,
-        [&](const QString &, const QString &) {
-            if (!net.isConnected() && !connecting)
-                doConnect(true);
-            else if (net.isConnected())
-                net.sendRegister(loginDlg.username(), loginDlg.password());
-        });
+        // ── 发起连接（点击登录/注册时调用） ──
+        bool connecting = false;
+        auto doConnect = [&](bool isRegister) {
+            connecting = true;
+            pendingRegister = isRegister;
+            loginDlg.setStatus(QStringLiteral("正在连接服务器..."));
+            net.connectToServer(serverHost, serverPort);
+        };
 
-    // ── 连接错误 → 提示手动启动服务器 ──
-    QObject::connect(&net, &ClientNetwork::connectionError,
-        [&](const QString &err) {
-            if (!connecting) return;
-            connecting = false;
-            loginDlg.setStatus(QStringLiteral("连接失败：%1\n请确保 chat_server 已在运行").arg(err));
-            loginDlg.setButtonsEnabled(true);
-        });
+        // ── 按钮事件 ──
+        QObject::connect(&loginDlg, &LoginDialog::loginRequested,
+            [&](const QString &, const QString &) {
+                if (!net.isConnected() && !connecting)
+                    doConnect(false);
+                else if (net.isConnected())
+                    net.sendLogin(loginDlg.username(), loginDlg.password());
+            });
 
-    // ── 运行登录对话框 ──
-    if (loginDlg.exec() != QDialog::Accepted || !authenticated) {
-        net.disconnect();
-        return 0;
+        QObject::connect(&loginDlg, &LoginDialog::registerRequested,
+            [&](const QString &, const QString &) {
+                if (!net.isConnected() && !connecting)
+                    doConnect(true);
+                else if (net.isConnected())
+                    net.sendRegister(loginDlg.username(), loginDlg.password());
+            });
+
+        // ── 连接错误 → 提示手动启动服务器 ──
+        QObject::connect(&net, &ClientNetwork::connectionError,
+            [&](const QString &err) {
+                if (!connecting) return;
+                connecting = false;
+                loginDlg.setStatus(QStringLiteral("连接失败：%1\n请确保 chat_server 已在运行").arg(err));
+                loginDlg.setButtonsEnabled(true);
+            });
+
+        // ── 运行登录对话框 ──
+        if (loginDlg.exec() != QDialog::Accepted || !authenticated) {
+            net.disconnect();
+            break;
+        }
+
+        // ── 进入主界面 ──
+        bool wantLogout = false;
+        MainWindow *mainWin = new MainWindow(&net, loggedInUser);
+        QObject::connect(mainWin, &MainWindow::logoutRequested, [&]() {
+            wantLogout = true;
+        });
+        mainWin->show();
+        net.sendUserList();
+
+        app.exec();
+
+        delete mainWin;
+
+        if (!wantLogout)
+            break;
     }
 
-    // ── 进入主界面 ──
-    MainWindow *mainWin = new MainWindow(&net, loggedInUser);
-    mainWin->show();
-    net.sendUserList();
-
-    int ret = app.exec();
-    delete mainWin;
-    return ret;
+    return 0;
 }

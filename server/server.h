@@ -44,6 +44,7 @@ private:
     void handleRegister(QTcpSocket *sock, const QJsonObject &data);
     void handleLogin(QTcpSocket *sock, const QJsonObject &data);
     void handleLogout(QTcpSocket *sock);
+    void handleDeleteAccount(QTcpSocket *sock);
 
     // 聊天
     void handlePrivateMsg(QTcpSocket *sock, const QJsonObject &data);

@@ -68,6 +68,10 @@ constexpr int FILE_CHUNK_SIZE = 8192;
 #define MSG_OFFLINE_QUERY "offline_query"
 #define MSG_OFFLINE_RES   "offline_res"
 
+// 客户注销
+#define MSG_DELETE_ACCOUNT     "delete_account"
+#define MSG_DELETE_ACCOUNT_RES "delete_account_res"
+
 // 服务器 → 客户端 响应
 #define MSG_REGISTER_RES    "register_res"
 #define MSG_LOGIN_RES       "login_res"

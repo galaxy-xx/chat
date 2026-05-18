@@ -29,6 +29,7 @@ public:
 signals:
     void imageClicked(const QString &filepath);
     void fileClicked(const QString &filename, const QString &base64Data);
+    void bubbleRightClicked(BubbleWidget *bubble);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;

@@ -65,6 +65,13 @@ void ClientNetwork::sendLogout()
     sendMessage(msg);
 }
 
+void ClientNetwork::sendDeleteAccount()
+{
+    QJsonObject msg;
+    msg["type"] = MSG_DELETE_ACCOUNT;
+    sendMessage(msg);
+}
+
 void ClientNetwork::sendPrivateMsg(const QString &target, const QString &content)
 {
     QJsonObject msg;
@@ -109,11 +116,18 @@ void ClientNetwork::sendGroupFileMsg(int groupId, const QString &filename,
     sendMessage(msg);
 }
 
-void ClientNetwork::sendHistoryQuery(const QString &type, const QString &target, int limit)
+void ClientNetwork::sendHistoryQuery(const QString &type, const QString &target, int limit,
+                                     const QString &startTime, const QString &endTime)
 {
     QJsonObject msg;
+    QJsonObject data;
+    data["type"] = type;
+    data["target"] = target;
+    data["limit"] = limit;
+    if (!startTime.isEmpty()) data["start_time"] = startTime;
+    if (!endTime.isEmpty()) data["end_time"] = endTime;
     msg["type"] = MSG_HISTORY;
-    msg["data"] = QJsonObject{{"type", type}, {"target", target}, {"limit", limit}};
+    msg["data"] = data;
     sendMessage(msg);
 }
 

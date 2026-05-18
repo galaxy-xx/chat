@@ -108,7 +108,8 @@ void MainWindow::setupUI()
     fileMenu->addAction(QStringLiteral("好友管理..."), this, &MainWindow::onFriendManagement);
     fileMenu->addAction(QStringLiteral("创建群聊..."), this, &MainWindow::onCreateGroup);
     fileMenu->addSeparator();
-    fileMenu->addAction(QStringLiteral("断开连接"), this, &MainWindow::onDisconnect);
+    fileMenu->addAction(QStringLiteral("注销账号"), this, &MainWindow::onDeleteAccount);
+    fileMenu->addAction(QStringLiteral("退出登录"), this, &MainWindow::onDisconnect);
 
     auto *viewMenu = menuBar->addMenu(QStringLiteral("查看"));
     viewMenu->addAction(QStringLiteral("聊天历史..."), this, [this](){ showHistoryDialog(); });
@@ -221,6 +222,8 @@ void MainWindow::setupUI()
     m_publicChat = new ChatWidget("ALL", this);
     m_publicChat->appendSystemMessage(QStringLiteral("欢迎进入公共聊天室"));
     m_chatStack->addWidget(m_publicChat);
+    connect(m_publicChat, &ChatWidget::bubbleRightClicked,
+            this, &MainWindow::showRecallMenu);
 
     rightLayout->addWidget(m_chatStack, 1);
 
@@ -612,6 +615,16 @@ void MainWindow::onMessageReceived(const QJsonObject &msg)
         QMessageBox::information(this, QStringLiteral("邀请好友"),
             ok ? QStringLiteral("邀请已发送") : msg);
     }
+    else if (type == MSG_DELETE_ACCOUNT_RES) {
+        bool ok = data["ok"].toBool();
+        if (ok) {
+            QMessageBox::information(this, QStringLiteral("注销"), QStringLiteral("账号已注销"));
+            m_net->disconnect();
+            close();
+        } else {
+            QMessageBox::warning(this, QStringLiteral("注销"), QStringLiteral("注销失败"));
+        }
+    }
 }
 
 void MainWindow::rebuildGroupList()
@@ -748,6 +761,8 @@ ChatWidget* MainWindow::getOrCreatePrivateChat(const QString &user)
     auto *chat = new ChatWidget(user, this);
     m_chatStack->addWidget(chat);
     m_privateChats[user] = chat;
+    connect(chat, &ChatWidget::bubbleRightClicked,
+            this, &MainWindow::showRecallMenu);
     return chat;
 }
 
@@ -1031,6 +1046,8 @@ ChatWidget* MainWindow::getOrCreateGroupChat(int groupId, const QString &groupNa
     m_groupChats[groupId] = chat;
     m_groupNames[groupId] = groupName;
     chat->appendSystemMessage(QStringLiteral("欢迎加入群聊 %1").arg(groupName));
+    connect(chat, &ChatWidget::bubbleRightClicked,
+            this, &MainWindow::showRecallMenu);
     return chat;
 }
 
@@ -1146,5 +1163,16 @@ void MainWindow::onDisconnect()
 {
     m_net->sendLogout();
     m_net->disconnect();
+    emit logoutRequested();
     close();
+}
+
+void MainWindow::onDeleteAccount()
+{
+    auto result = QMessageBox::warning(this, QStringLiteral("注销账号"),
+        QStringLiteral("确定要注销账号「%1」吗？此操作不可撤销，所有数据将被删除。").arg(m_username),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (result != QMessageBox::Yes) return;
+
+    m_net->sendDeleteAccount();
 }

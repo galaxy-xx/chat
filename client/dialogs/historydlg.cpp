@@ -11,6 +11,9 @@
 #include <QDialogButtonBox>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QCheckBox>
+#include <QDateTimeEdit>
+#include <QDateTime>
 
 #include "../../client/clientnetwork.h"
 #include "../../protocol.h"
@@ -20,17 +23,41 @@ HistoryDialog::HistoryDialog(ClientNetwork *net, const QString &selfUsername,
     : QDialog(parent)
 {
     setWindowTitle(QStringLiteral("聊天与文件历史"));
-    resize(520, 450);
+    resize(520, 500);
 
     auto *layout = new QVBoxLayout(this);
     auto *tabWidget = new QTabWidget(this);
     layout->addWidget(tabWidget);
 
+    // 时间范围控件（共用）
+    auto *timeRangeWidget = new QWidget(this);
+    auto *timeLayout = new QHBoxLayout(timeRangeWidget);
+    timeLayout->setContentsMargins(0, 0, 0, 0);
+
+    auto *timeCheck = new QCheckBox(QStringLiteral("按时间范围筛选"), timeRangeWidget);
+    auto *startEdit = new QDateTimeEdit(timeRangeWidget);
+    startEdit->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
+    startEdit->setDateTime(QDateTime::currentDateTime().addMonths(-1));
+    startEdit->setEnabled(false);
+    auto *endEdit = new QDateTimeEdit(timeRangeWidget);
+    endEdit->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
+    endEdit->setDateTime(QDateTime::currentDateTime());
+    endEdit->setEnabled(false);
+
+    connect(timeCheck, &QCheckBox::toggled, startEdit, &QDateTimeEdit::setEnabled);
+    connect(timeCheck, &QCheckBox::toggled, endEdit, &QDateTimeEdit::setEnabled);
+
+    timeLayout->addWidget(timeCheck);
+    timeLayout->addWidget(new QLabel(QStringLiteral("从：")));
+    timeLayout->addWidget(startEdit);
+    timeLayout->addWidget(new QLabel(QStringLiteral("到：")));
+    timeLayout->addWidget(endEdit);
+
     // 聊天记录标签页
     auto *chatPage = new QWidget(this);
     auto *chatLayout = new QVBoxLayout(chatPage);
     auto *chatTypeCombo = new QComboBox(chatPage);
-    chatTypeCombo->addItems({QStringLiteral("public"), QStringLiteral("private"), QStringLiteral("all")});
+    chatTypeCombo->addItems({QStringLiteral("公聊记录"), QStringLiteral("私聊记录"), QStringLiteral("全部记录")});
     auto *chatTargetEdit = new QLineEdit(chatPage);
     chatTargetEdit->setPlaceholderText(QStringLiteral("用户名（查私聊记录）"));
     auto *chatDisplay = new QTextEdit(chatPage);
@@ -44,6 +71,7 @@ HistoryDialog::HistoryDialog(ClientNetwork *net, const QString &selfUsername,
     chatLayout->addWidget(chatTypeCombo);
     chatLayout->addWidget(new QLabel(QStringLiteral("目标："), chatPage));
     chatLayout->addWidget(chatTargetEdit);
+    chatLayout->addWidget(timeRangeWidget);
     chatLayout->addWidget(chatBtn);
     chatLayout->addWidget(chatDisplay);
     tabWidget->addTab(chatPage, QStringLiteral("聊天记录"));
@@ -52,7 +80,7 @@ HistoryDialog::HistoryDialog(ClientNetwork *net, const QString &selfUsername,
     auto *filePage = new QWidget(this);
     auto *fileLayout = new QVBoxLayout(filePage);
     auto *fileTypeCombo = new QComboBox(filePage);
-    fileTypeCombo->addItems({QStringLiteral("public"), QStringLiteral("private"), QStringLiteral("all")});
+    fileTypeCombo->addItems({QStringLiteral("所有文件"), QStringLiteral("公有文件"), QStringLiteral("私有文件")});
     auto *fileTargetEdit = new QLineEdit(filePage);
     fileTargetEdit->setPlaceholderText(QStringLiteral("用户名（查私有文件）"));
     auto *fileDisplay = new QTextEdit(filePage);
@@ -75,12 +103,22 @@ HistoryDialog::HistoryDialog(ClientNetwork *net, const QString &selfUsername,
     layout->addWidget(btnBox);
 
     // 搜索聊天
-    connect(chatBtn, &QPushButton::clicked, [this, net, chatTypeCombo, chatTargetEdit, chatDisplay, selfUsername]() {
-        QString type = chatTypeCombo->currentText();
+    connect(chatBtn, &QPushButton::clicked, [this, net, chatTypeCombo, chatTargetEdit, chatDisplay, selfUsername, timeCheck, startEdit, endEdit]() {
+        QString displayType = chatTypeCombo->currentText();
+        QString type;
+        if (displayType == QStringLiteral("公聊记录")) type = "public";
+        else if (displayType == QStringLiteral("私聊记录")) type = "private";
+        else type = "all";
         QString target = chatTargetEdit->text().trimmed();
         if (target.isEmpty()) target = selfUsername;
         chatDisplay->clear();
         chatDisplay->append(QStringLiteral("搜索中..."));
+
+        QString startTime, endTime;
+        if (timeCheck->isChecked()) {
+            startTime = startEdit->dateTime().toString("yyyy-MM-dd HH:mm:ss");
+            endTime = endEdit->dateTime().toString("yyyy-MM-dd HH:mm:ss");
+        }
 
         QMetaObject::Connection *conn = new QMetaObject::Connection;
         *conn = connect(net, &ClientNetwork::messageReceived,
@@ -105,12 +143,12 @@ HistoryDialog::HistoryDialog(ClientNetwork *net, const QString &selfUsername,
                 delete conn;
             }
         });
-        net->sendHistoryQuery(type, target, 200);
+        net->sendHistoryQuery(type, target, 200, startTime, endTime);
     });
 
     // 搜索文件
     connect(fileBtn, &QPushButton::clicked, [this, net, fileTypeCombo, fileTargetEdit, fileDisplay, selfUsername]() {
-        QString type = fileTypeCombo->currentText();
+        QString filterType = fileTypeCombo->currentText(); // 所有文件/公有文件/私有文件
         QString target = fileTargetEdit->text().trimmed();
         if (target.isEmpty()) target = selfUsername;
         fileDisplay->clear();
@@ -118,11 +156,19 @@ HistoryDialog::HistoryDialog(ClientNetwork *net, const QString &selfUsername,
 
         QMetaObject::Connection *conn = new QMetaObject::Connection;
         *conn = connect(net, &ClientNetwork::messageReceived,
-                        [this, net, fileDisplay, conn](const QJsonObject &msg) {
+                        [this, net, fileDisplay, conn, filterType](const QJsonObject &msg) {
             if (msg["type"].toString() == MSG_HISTORY_RES) {
                 QJsonObject data = msg["data"].toObject();
                 fileDisplay->clear();
-                QJsonArray files = data["files"].toArray();
+                QJsonArray allFiles = data["files"].toArray();
+                QJsonArray files;
+                for (const auto &f : allFiles) {
+                    QJsonObject obj = f.toObject();
+                    QString ft = obj["file_type"].toString();
+                    if (filterType == QStringLiteral("公有文件") && ft != "public") continue;
+                    if (filterType == QStringLiteral("私有文件") && ft != "private") continue;
+                    files.append(f);
+                }
                 if (files.isEmpty())
                     fileDisplay->append(QStringLiteral("未找到文件。"));
                 else
@@ -137,6 +183,6 @@ HistoryDialog::HistoryDialog(ClientNetwork *net, const QString &selfUsername,
                 delete conn;
             }
         });
-        net->sendHistoryQuery(type == "all" ? "file" : type, target, 200);
+        net->sendHistoryQuery("all", target, 200);
     });
 }

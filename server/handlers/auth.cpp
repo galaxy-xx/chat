@@ -84,3 +84,24 @@ void ChatServer::handleLogout(QTcpSocket *sock)
     notifyUserStatus(username, false);
     qInfo() << "用户登出：" << username;
 }
+
+void ChatServer::handleDeleteAccount(QTcpSocket *sock)
+{
+    QString username = m_clients.value(sock);
+    if (username.isEmpty()) return;
+
+    m_onlineUsers.remove(username);
+    m_userMap.remove(username);
+    m_clients.remove(sock);
+
+    bool ok = m_db->deleteUser(username);
+
+    QJsonObject res;
+    res["type"] = MSG_DELETE_ACCOUNT_RES;
+    res["data"] = QJsonObject{{"ok", ok}};
+    sendPacket(sock, QJsonDocument(res).toJson(QJsonDocument::Compact));
+
+    broadcastUserList();
+    notifyUserStatus(username, false);
+    qInfo() << "用户注销：" << username;
+}

@@ -137,6 +137,8 @@ void ChatServer::handleHistory(QTcpSocket *sock, const QJsonObject &data)
     QString target = data["target"].toString();
     if (target.isEmpty()) target = sender;
     int limit = data["limit"].toInt(100);
+    QString startTime = data["start_time"].toString();
+    QString endTime = data["end_time"].toString();
 
     QJsonObject res;
     res["type"] = MSG_HISTORY_RES;
@@ -144,11 +146,11 @@ void ChatServer::handleHistory(QTcpSocket *sock, const QJsonObject &data)
     if (type == "file" || type == "all") {
         res["data"] = QJsonObject{
             {"messages", QJsonArray()},
-            {"files", m_db->getFiles(type, target, limit)}
+            {"files", m_db->getFiles(type, target, limit, startTime, endTime)}
         };
     } else {
         res["data"] = QJsonObject{
-            {"messages", m_db->getMessages(type, target, limit)},
+            {"messages", m_db->getMessages(type, target, limit, startTime, endTime)},
             {"files", QJsonArray()}
         };
     }
@@ -170,6 +172,9 @@ void ChatServer::handleFileMsg(QTcpSocket *sock, const QJsonObject &data)
 
     QString content = filename + "||" + base64Data;
     int msgId = m_db->saveMessage(sender, target, "file", content);
+
+    QString fileType = (target == "ALL") ? "public" : "private";
+    m_db->saveFileRecord(sender, target, fileType, filename, "inline", filesize);
 
     QJsonObject fwd;
     fwd["type"] = MSG_FILE_MSG;

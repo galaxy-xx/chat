@@ -92,6 +92,14 @@ bool Database::userExists(const QString &user)
     return q.exec() && q.next();
 }
 
+bool Database::deleteUser(const QString &user)
+{
+    QSqlQuery q(m_db);
+    q.prepare("DELETE FROM users WHERE username = ?");
+    q.addBindValue(user);
+    return q.exec();
+}
+
 int Database::saveMessage(const QString &sender, const QString &target,
                            const QString &type, const QString &content)
 {
@@ -107,28 +115,37 @@ int Database::saveMessage(const QString &sender, const QString &target,
 }
 
 QJsonArray Database::getMessages(const QString &type, const QString &target,
-                                  int limit)
+                                  int limit, const QString &startTime,
+                                  const QString &endTime)
 {
     QJsonArray arr;
     QSqlQuery q(m_db);
     QString sql;
+    QString timeFilter;
+    if (!startTime.isEmpty())
+        timeFilter += " AND timestamp >= ?";
+    if (!endTime.isEmpty())
+        timeFilter += " AND timestamp <= ?";
+
     if (type == "private") {
         sql = "SELECT id, sender, target, content, timestamp, recalled, msg_type FROM messages "
-              "WHERE (msg_type='private' OR msg_type='file') AND (sender=? OR target=?) "
-              "ORDER BY id DESC LIMIT ?";
+              "WHERE (msg_type='private' OR msg_type='file') AND (sender=? OR target=?)"
+              + timeFilter + " ORDER BY id DESC LIMIT ?";
         q.prepare(sql);
         q.addBindValue(target);
         q.addBindValue(target);
     } else if (type == "public") {
         sql = "SELECT id, sender, target, content, timestamp, recalled, msg_type FROM messages "
-              "WHERE msg_type='public' OR (msg_type='file' AND target='ALL') "
-              "ORDER BY id DESC LIMIT ?";
+              "WHERE (msg_type='public' OR (msg_type='file' AND target='ALL'))"
+              + timeFilter + " ORDER BY id DESC LIMIT ?";
         q.prepare(sql);
     } else {
         sql = "SELECT id, sender, target, content, timestamp, recalled, msg_type FROM messages "
-              "ORDER BY id DESC LIMIT ?";
+              "WHERE 1=1" + timeFilter + " ORDER BY id DESC LIMIT ?";
         q.prepare(sql);
     }
+    if (!startTime.isEmpty()) q.addBindValue(startTime);
+    if (!endTime.isEmpty()) q.addBindValue(endTime);
     q.addBindValue(limit);
     if (!q.exec()) return arr;
 
@@ -414,27 +431,36 @@ int Database::saveFileRecord(const QString &sender, const QString &target,
 }
 
 QJsonArray Database::getFiles(const QString &type, const QString &target,
-                               int limit)
+                               int limit, const QString &startTime,
+                               const QString &endTime)
 {
     QJsonArray arr;
     QSqlQuery q(m_db);
     QString sql;
+    QString timeFilter;
+    if (!startTime.isEmpty())
+        timeFilter += " AND timestamp >= ?";
+    if (!endTime.isEmpty())
+        timeFilter += " AND timestamp <= ?";
+
     if (type == "private") {
         sql = "SELECT sender, target, filename, filesize, timestamp, filepath FROM files "
-              "WHERE file_type='private' AND (sender=? OR target=?) "
-              "ORDER BY id DESC LIMIT ?";
+              "WHERE file_type='private' AND (sender=? OR target=?)"
+              + timeFilter + " ORDER BY id DESC LIMIT ?";
         q.prepare(sql);
         q.addBindValue(target);
         q.addBindValue(target);
     } else if (type == "public") {
         sql = "SELECT sender, target, filename, filesize, timestamp, filepath FROM files "
-              "WHERE file_type='public' ORDER BY id DESC LIMIT ?";
+              "WHERE file_type='public'" + timeFilter + " ORDER BY id DESC LIMIT ?";
         q.prepare(sql);
     } else {
         sql = "SELECT sender, target, filename, filesize, timestamp, filepath, file_type FROM files "
-              "ORDER BY id DESC LIMIT ?";
+              "WHERE 1=1" + timeFilter + " ORDER BY id DESC LIMIT ?";
         q.prepare(sql);
     }
+    if (!startTime.isEmpty()) q.addBindValue(startTime);
+    if (!endTime.isEmpty()) q.addBindValue(endTime);
     q.addBindValue(limit);
     if (!q.exec()) return arr;
 

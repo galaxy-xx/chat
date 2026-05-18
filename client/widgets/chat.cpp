@@ -39,6 +39,14 @@ bool ChatWidget::eventFilter(QObject *obj, QEvent *event)
             }
         }
     }
+    if (event->type() == QEvent::ContextMenu) {
+        if (auto *bubble = qobject_cast<BubbleWidget*>(obj)) {
+            if (bubble->isSelf()) {
+                emit bubbleRightClicked(bubble);
+                return true;
+            }
+        }
+    }
     return QWidget::eventFilter(obj, event);
 }
 
@@ -56,6 +64,7 @@ void ChatWidget::appendMessage(const QString &from, const QString &content,
     }
 
     auto *bubble = new BubbleWidget(content, time, isSelf, msgId, m_contentWidget);
+    bubble->installEventFilter(this);
     m_contentLayout->insertWidget(m_contentLayout->count() - 1, bubble);
 
     if (msgId > 0)

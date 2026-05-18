@@ -100,6 +100,7 @@ void ChatServer::processMessage(QTcpSocket *sock, const QByteArray &payload)
     if (type == MSG_REGISTER)           handleRegister(sock, data);
     else if (type == MSG_LOGIN)         handleLogin(sock, data);
     else if (type == MSG_LOGOUT)        handleLogout(sock);
+    else if (type == MSG_DELETE_ACCOUNT) handleDeleteAccount(sock);
     else if (type == MSG_PRIVATE_MSG)   handlePrivateMsg(sock, data);
     else if (type == MSG_PUBLIC_MSG)    handlePublicMsg(sock, data);
     else if (type == MSG_FILE_META)     handleFileMeta(sock, data);

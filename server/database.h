@@ -20,12 +20,15 @@ public:
     bool registerUser(const QString &user, const QString &pass);
     bool loginUser(const QString &user, const QString &pass);
     bool userExists(const QString &user);
+    bool deleteUser(const QString &user);
 
     // 消息
     int saveMessage(const QString &sender, const QString &target,
                      const QString &type, const QString &content);
     QJsonArray getMessages(const QString &type, const QString &target,
-                           int limit = 100);
+                           int limit = 100,
+                           const QString &startTime = QString(),
+                           const QString &endTime = QString());
 
     struct MessageInfo {
         int id;
@@ -63,7 +66,9 @@ public:
                        const QString &fileType, const QString &filename,
                        const QString &filepath, qint64 size);
     QJsonArray getFiles(const QString &type, const QString &target,
-                        int limit = 100);
+                        int limit = 100,
+                        const QString &startTime = QString(),
+                        const QString &endTime = QString());
 };
 
 #endif // DATABASE_H

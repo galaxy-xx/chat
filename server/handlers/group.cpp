@@ -183,6 +183,7 @@ void ChatServer::handleGroupFileMsg(QTcpSocket *sock, const QJsonObject &data)
 
     QString content = filename + "||" + base64Data;
     int msgId = m_db->saveMessage(sender, QString::number(groupId), "file", content);
+    m_db->saveFileRecord(sender, QString::number(groupId), "group", filename, "inline", filesize);
 
     QJsonObject fwd;
     fwd["type"] = MSG_GROUP_FILE_MSG;

@@ -34,6 +34,9 @@ public:
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
 
+signals:
+    void logoutRequested();
+
 private slots:
     void onMessageReceived(const QJsonObject &msg);
     void onSendClicked();
@@ -50,6 +53,7 @@ private:
     ChatWidget* getOrCreatePrivateChat(const QString &user);
     void showFileDialog();
     void showHistoryDialog();
+    void onDeleteAccount();
 
     // 文件消息处理
     static bool isImageFile(const QString &filename);

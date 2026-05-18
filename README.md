@@ -1,4 +1,4 @@
-# Chat - 基于 Qt6 的 Linux 即时通信系统
+# Chat - 基于 Qt6 的 Linux 即时通信系统  (cumt linux作业)
 
 一个基于 C/S 架构的多客户端即时通信系统，参考微信风格设计，使用 C++/Qt6 开发。
 
